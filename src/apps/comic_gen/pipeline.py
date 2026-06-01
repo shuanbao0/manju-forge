@@ -244,15 +244,41 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
-    def generate_mg_spec(self, script_id: str, style_hint: Optional[str] = None) -> Script:
+    def generate_mg_copy(
+        self,
+        title: str,
+        text: str = "",
+        quality: str = "standard",
+        style_hint: Optional[str] = None,
+    ) -> str:
+        """Flow B step 0 (optional): LLM expands a title (+ existing content)
+        into Remotion-ready narration copy. Stateless — no project required."""
+        from .remotion_mg import MGCopyQuality
+
+        with scoped_instance(None, InstanceType.LLM):
+            return self.mg_generator.generate_copy(
+                title, text, quality=MGCopyQuality(quality), style_hint=style_hint
+            )
+
+    def generate_mg_spec(
+        self,
+        script_id: str,
+        style_hint: Optional[str] = None,
+        quality: str = "standard",
+    ) -> Script:
         """Flow B step 1: LLM authors the VideoSpec and stores it on the script."""
+        from .remotion_mg import MGCopyQuality
+
         script = self.get_script(script_id)
         if not script:
             raise ValueError("Script not found")
         aspect = getattr(script.model_settings, "storyboard_aspect_ratio", "9:16") or "9:16"
         with scoped_instance(script.model_settings.llm_instance_id, InstanceType.LLM):
             spec = self.mg_generator.generate_spec(
-                script.original_text, aspect_ratio=aspect, style_hint=style_hint
+                script.original_text,
+                aspect_ratio=aspect,
+                style_hint=style_hint,
+                quality=MGCopyQuality(quality),
             )
         script.mg_spec = spec.to_payload()
         script.updated_at = time.time()
@@ -268,6 +294,13 @@ class ComicGenPipeline:
             raise ValueError("Script not found")
         if not script.mg_spec:
             raise ValueError("No mg_spec on this project — run generate_mg_spec first")
+
+        if not self.mg_generator.render_client.health():
+            raise RuntimeError(
+                "Remotion 渲染服务未运行(默认 http://localhost:3001)。"
+                "本地开发请运行 `npm run dev`(已自动拉起渲染服务),或单独启动 "
+                "`cd remotion && REMOTION_OUTPUT_ROOT=../output npm run server`。"
+            )
 
         spec = VideoSpec.model_validate(script.mg_spec)
         output_filename = f"remotion_{script_id}_{int(time.time())}.mp4"

@@ -498,8 +498,32 @@ async def create_mg_project(request: CreateMGProjectRequest):
     return signed_response(result)
 
 
+class GenerateMGCopyRequest(BaseModel):
+    title: str = ""
+    text: str = ""
+    quality: str = "standard"  # concise | standard | rich
+    style_hint: Optional[str] = None
+
+
+@app.post("/projects/mg/copy")
+async def generate_mg_copy(request: GenerateMGCopyRequest):
+    """Flow B step 0: LLM expands a title (+ existing content) into
+    Remotion-ready narration copy. Stateless — no project required."""
+    if not request.title.strip() and not request.text.strip():
+        raise HTTPException(status_code=400, detail="title 或 text 至少提供一个")
+    try:
+        copy = await _ctx_runtime.run_in_executor(
+            None, pipeline.generate_mg_copy,
+            request.title, request.text, request.quality, request.style_hint,
+        )
+        return {"copy": copy}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class GenerateMGSpecRequest(BaseModel):
     style_hint: Optional[str] = None
+    quality: str = "standard"  # concise | standard | rich
 
 
 @app.post("/projects/{script_id}/remotion/spec", response_model=Script)
@@ -507,7 +531,7 @@ async def generate_mg_spec(script_id: str, request: GenerateMGSpecRequest):
     """Flow B step 1: LLM authors the VideoSpec for this project."""
     try:
         result = await _ctx_runtime.run_in_executor(
-            None, pipeline.generate_mg_spec, script_id, request.style_hint,
+            None, pipeline.generate_mg_spec, script_id, request.style_hint, request.quality,
         )
         return signed_response(result)
     except ValueError as e:

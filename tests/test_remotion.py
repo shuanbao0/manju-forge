@@ -191,3 +191,81 @@ def test_mg_generator_rejects_bad_json():
     gen.llm = SimpleNamespace(chat=lambda messages, response_format=None: "not json at all")
     with pytest.raises(ValueError):
         gen.generate_spec("x")
+
+
+# ── Flow B step 0: copy generation + quality (Builder + Strategy) ──────────
+
+
+@pytest.mark.parametrize(
+    "quality,target_sec,sections",
+    [("concise", "30", "2"), ("standard", "55", "3"), ("rich", "90", "4")],
+)
+def test_copy_prompt_builder_encodes_quality(quality, target_sec, sections):
+    from src.apps.comic_gen.remotion_mg import MGCopyPromptBuilder, MGCopyQuality
+
+    messages = (
+        MGCopyPromptBuilder()
+        .with_title("AI 生成小说的优点")
+        .with_existing("它能几秒扩写成章节")
+        .with_quality(MGCopyQuality(quality))
+        .with_style_hint("科技深色")
+        .build()
+    )
+    system = messages[0]["content"]
+    user = messages[1]["content"]
+    assert f"{target_sec} 秒" in system          # Strategy table drives duration
+    assert f"{sections} 个小节" in system         # ...and section count
+    assert "科技深色" in system
+    assert "AI 生成小说的优点" in user
+    assert "它能几秒扩写成章节" in user
+
+
+def test_spec_prompt_builder_encodes_quality_clip_hint():
+    from src.apps.comic_gen.remotion_mg import MGPromptBuilder, MGCopyQuality
+
+    system = (
+        MGPromptBuilder()
+        .with_topic("讲讲增长")
+        .with_size(1080, 1920)
+        .with_quality(MGCopyQuality.RICH)
+        .build()[0]["content"]
+    )
+    assert "8-10 个" in system  # rich → more clips
+
+
+def test_mg_generator_generate_copy_returns_text():
+    from src.apps.comic_gen.remotion_mg import RemotionMGGenerator, MGCopyQuality
+
+    seen = {}
+
+    def _chat(messages, response_format=None):
+        seen["response_format"] = response_format  # copy step must NOT force json
+        return "  生成好的文案正文  "
+
+    gen = RemotionMGGenerator(render_client=object())
+    gen.llm = SimpleNamespace(chat=_chat)
+    out = gen.generate_copy("标题", "素材", quality=MGCopyQuality.CONCISE)
+    assert out == "生成好的文案正文"
+    assert seen["response_format"] is None
+
+
+# ── Renderer self-verifies the cross-process path contract ────────────────
+
+
+def test_render_raises_when_output_missing(monkeypatch):
+    from src.models import remotion_renderer as rr
+
+    client = rr.RemotionRenderClient(render_url="http://x", output_root="/tmp")
+
+    class _Resp:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"ok": True, "seconds": 1.0}  # service claims success...
+
+    monkeypatch.setattr(rr.requests, "post", lambda *a, **k: _Resp())
+    spec = VideoSpec(clips=[Clip(duration_sec=3)])
+    # ...but no file was written where the backend will serve it → hard error.
+    with pytest.raises(rr.RemotionRenderError, match="未出现在"):
+        client.render(spec, "/tmp/does-not-exist/remotion_z.mp4")

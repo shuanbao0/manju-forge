@@ -375,9 +375,21 @@ export const api = {
         return { ...res.data, originalText: res.data.original_text };
     },
 
-    generateMGSpec: async (scriptId: string, styleHint?: string) => {
+    generateMGCopy: async (
+        title: string,
+        text: string,
+        quality: string = "standard",
+        styleHint?: string,
+    ): Promise<{ copy: string }> => {
+        const res = await axios.post(`${API_URL}/projects/mg/copy`, {
+            title, text, quality, style_hint: styleHint ?? null,
+        });
+        return res.data;
+    },
+
+    generateMGSpec: async (scriptId: string, styleHint?: string, quality: string = "standard") => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/remotion/spec`, {
-            style_hint: styleHint ?? null,
+            style_hint: styleHint ?? null, quality,
         });
         return { ...res.data, originalText: res.data.original_text };
     },

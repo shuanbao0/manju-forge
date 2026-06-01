@@ -32,4 +32,16 @@ if (!fs.existsSync(frontendModules)) {
   execSync('npm install', { stdio: 'inherit', cwd: path.join(root, 'frontend') });
 }
 
+// 3. Setup Remotion render service dependencies if missing (optional engine —
+//    don't fail the whole dev setup if its install hiccups).
+const remotionModules = path.join(root, 'remotion', 'node_modules');
+if (!fs.existsSync(remotionModules)) {
+  console.log('[setup] Installing Remotion render service dependencies...');
+  try {
+    execSync('npm install', { stdio: 'inherit', cwd: path.join(root, 'remotion') });
+  } catch (e) {
+    console.warn('[setup] Remotion deps install failed (video rendering disabled):', e.message);
+  }
+}
+
 console.log('[setup] Done.');

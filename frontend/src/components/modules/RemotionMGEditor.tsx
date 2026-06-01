@@ -21,8 +21,10 @@ export default function RemotionMGEditor({ id }: { id: string | null }) {
     const [text, setText] = useState("");
     const [aspect, setAspect] = useState("9:16");
     const [styleHint, setStyleHint] = useState("");
-    const [busy, setBusy] = useState<null | "create" | "spec" | "render">(null);
+    const [quality, setQuality] = useState("standard");
+    const [busy, setBusy] = useState<null | "copy" | "create" | "spec" | "render">(null);
     const [error, setError] = useState<string | null>(null);
+    const [videoBroken, setVideoBroken] = useState(false);
 
     useEffect(() => {
         if (!id) return;
@@ -37,6 +39,23 @@ export default function RemotionMGEditor({ id }: { id: string | null }) {
     }, [id]);
 
     const goHome = () => { window.location.hash = "#/"; };
+
+    const handleGenerateCopy = async () => {
+        if (!title.trim() && !text.trim()) {
+            setError("请先填写标题(或一些已有内容)");
+            return;
+        }
+        setError(null);
+        setBusy("copy");
+        try {
+            const { copy } = await api.generateMGCopy(title.trim(), text.trim(), quality, styleHint || undefined);
+            if (copy) setText(copy);
+        } catch (e: any) {
+            setError(e?.response?.data?.detail || String(e?.message || e));
+        } finally {
+            setBusy(null);
+        }
+    };
 
     const handleGenerate = async () => {
         setError(null);
@@ -54,7 +73,7 @@ export default function RemotionMGEditor({ id }: { id: string | null }) {
                 window.location.hash = `#/mg/${p.id}`;
             }
             setBusy("spec");
-            const updated = await api.generateMGSpec(p.id, styleHint || undefined);
+            const updated = await api.generateMGSpec(p.id, styleHint || undefined, quality);
             setProject(updated);
         } catch (e: any) {
             setError(e?.response?.data?.detail || String(e?.message || e));
@@ -66,6 +85,7 @@ export default function RemotionMGEditor({ id }: { id: string | null }) {
     const handleRender = async () => {
         if (!project) return;
         setError(null);
+        setVideoBroken(false);
         setBusy("render");
         try {
             const updated = await api.renderMGVideo(project.id);
@@ -106,16 +126,28 @@ export default function RemotionMGEditor({ id }: { id: string | null }) {
                         placeholder="例如：三个增长黑客技巧"
                         className="w-full bg-gray-900 border border-white/10 rounded-lg px-3 py-2 text-sm disabled:opacity-60"
                     />
-                    <label className="block text-sm text-gray-400">文案 / 主题</label>
+                    <div className="flex items-center justify-between">
+                        <label className="block text-sm text-gray-400">文案 / 主题</label>
+                        {!project && (
+                            <button
+                                onClick={handleGenerateCopy}
+                                disabled={busy !== null}
+                                className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 disabled:opacity-50"
+                            >
+                                {busy === "copy" ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                                AI 生成文案
+                            </button>
+                        )}
+                    </div>
                     <textarea
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         disabled={!!project}
                         rows={6}
-                        placeholder="粘贴一段要讲解的内容，或描述视频主题。LLM 会把它转成动效脚本。"
+                        placeholder="粘贴一段要讲解的内容，或描述视频主题。也可只填标题，点「AI 生成文案」让 LLM 起草。"
                         className="w-full bg-gray-900 border border-white/10 rounded-lg px-3 py-2 text-sm disabled:opacity-60"
                     />
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                         <label className="text-sm text-gray-400">画幅</label>
                         <select
                             value={aspect}
@@ -127,11 +159,22 @@ export default function RemotionMGEditor({ id }: { id: string | null }) {
                             <option value="16:9">16:9 横屏</option>
                             <option value="1:1">1:1 方形</option>
                         </select>
+                        <label className="text-sm text-gray-400">质量</label>
+                        <select
+                            value={quality}
+                            onChange={(e) => setQuality(e.target.value)}
+                            className="bg-gray-900 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                            title="档位同时影响文案深度/时长与动效脚本的镜头节奏"
+                        >
+                            <option value="concise">精炼 · ~30s</option>
+                            <option value="standard">标准 · ~55s</option>
+                            <option value="rich">丰富 · ~90s</option>
+                        </select>
                         <input
                             value={styleHint}
                             onChange={(e) => setStyleHint(e.target.value)}
                             placeholder="风格倾向（可选）：科技深色 / 明亮活泼…"
-                            className="flex-1 bg-gray-900 border border-white/10 rounded-lg px-3 py-2 text-sm"
+                            className="flex-1 min-w-[12rem] bg-gray-900 border border-white/10 rounded-lg px-3 py-2 text-sm"
                         />
                     </div>
                 </section>
@@ -178,12 +221,27 @@ export default function RemotionMGEditor({ id }: { id: string | null }) {
                 {project?.remotion_video_url && (
                     <section className="space-y-2">
                         <div className="text-sm text-gray-400">成片</div>
-                        <video
-                            key={project.remotion_video_url}
-                            src={getAssetUrl(project.remotion_video_url)}
-                            controls
-                            className="w-full rounded-lg border border-white/10 bg-black"
-                        />
+                        {videoBroken ? (
+                            <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 px-4 py-3 text-sm">
+                                成片无法加载——通常是渲染服务的 output 根与后端不一致。{" "}
+                                <a
+                                    href={getAssetUrl(project.remotion_video_url)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="underline hover:text-amber-200"
+                                >
+                                    点此直接打开 / 下载
+                                </a>
+                            </div>
+                        ) : (
+                            <video
+                                key={project.remotion_video_url}
+                                src={getAssetUrl(project.remotion_video_url)}
+                                controls
+                                onError={() => setVideoBroken(true)}
+                                className="w-full rounded-lg border border-white/10 bg-black"
+                            />
+                        )}
                     </section>
                 )}
             </div>

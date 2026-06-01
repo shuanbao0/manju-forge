@@ -93,6 +93,18 @@ class RemotionRenderClient:
         data = resp.json()
         if not data.get("ok"):
             raise RemotionRenderError(f"Remotion render failed: {data.get('error')}")
+
+        # Self-verify the cross-process path contract: the renderer reported
+        # success, but if its REMOTION_OUTPUT_ROOT differs from ours the MP4
+        # landed somewhere we will never be able to serve. Turn that silent
+        # broken-<video> into an actionable error here.
+        abs_out = os.path.abspath(output_path)
+        if not os.path.isfile(abs_out):
+            raise RemotionRenderError(
+                f"渲染服务报告成功,但成片未出现在 {abs_out}。通常是渲染服务的 "
+                f"REMOTION_OUTPUT_ROOT({self.output_root})与后端 output 根不一致 —— "
+                f"请让两端指向同一目录。"
+            )
         return float(data.get("seconds", 0.0))
 
     # ── helpers ──────────────────────────────────────────────────────────
