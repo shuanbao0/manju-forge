@@ -61,6 +61,10 @@ services:
       # SMTP — Mailpit catches everything in dev; swap host/port for prod relay.
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
+      # Remotion render microservice (video flows A/B). Shares the ./output
+      # volume so output-relative paths sent over the wire resolve on each side.
+      - REMOTION_RENDER_URL=http://remotion-renderer:3001
+      - REMOTION_OUTPUT_ROOT=/app/output
     volumes:
       - ./output:/app/output
       - manju_app_data:/app/data
@@ -75,6 +79,21 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    networks:
+      - manju
+
+  # Remotion render microservice — local "pseudo-motion" video engine (flows
+  # A/B). Internal-only (no published port); backend reaches it by service
+  # name. Shares the ./output volume with backend.
+  remotion-renderer:
+    image: shuanbaoai/manju-forge-remotion:${IMAGE_TAG:-latest}
+    container_name: manju-forge-remotion
+    restart: unless-stopped
+    environment:
+      - REMOTION_OUTPUT_ROOT=/app/output
+      - REMOTION_RENDER_PORT=3001
+    volumes:
+      - ./output:/app/output
     networks:
       - manju
 

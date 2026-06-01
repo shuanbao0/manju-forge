@@ -17,6 +17,7 @@ on:
           - both
           - backend
           - frontend
+          - remotion
       push:
         description: "Push to Docker Hub (uncheck to dry-run build only)"
         required: true
@@ -40,9 +41,15 @@ jobs:
           - component: backend
             dockerfile: Dockerfile.backend
             image: manju-forge-backend
+            context: .
           - component: frontend
             dockerfile: Dockerfile.frontend
             image: manju-forge-frontend
+            context: .
+          - component: remotion
+            dockerfile: remotion/Dockerfile.remotion
+            image: manju-forge-remotion
+            context: ./remotion
 
     steps:
       - name: Skip if not selected
@@ -90,7 +97,7 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: ${{ inputs.push }}
