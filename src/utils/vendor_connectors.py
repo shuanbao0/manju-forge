@@ -394,6 +394,22 @@ _FAL = VendorConnector(
 # rather than as full vendor cards. We expose them here only as references so
 # the FE can deep-link from the LLM section to docs.
 
+# ── Remotion (local render engine — no credentials) ───────────────────────
+# Not a cloud API: renders "Ken Burns" motion locally (flow A) and full
+# motion-graphics videos (flow B). Surfaced as a vendor so the Settings UI can
+# create an I2V instance pointing at it; it carries no credential fields.
+_REMOTION = VendorConnector(
+    id="remotion",
+    display_name="Remotion (本地渲染)",
+    description="本地 Remotion 引擎：对静图做运镜伪视频替代 i2v，零模型调用成本。需运行渲染微服务。",
+    capabilities=("i2v", "t2v"),
+    family_prefixes=("remotion-",),
+    docs_url="https://www.remotion.dev/",
+    badges=("local", "free"),
+    accent="slate",
+)
+
+
 DEFAULT_VENDOR_CONNECTORS: Tuple[VendorConnector, ...] = (
     _DASHSCOPE,
     _KLING,
@@ -406,6 +422,7 @@ DEFAULT_VENDOR_CONNECTORS: Tuple[VendorConnector, ...] = (
     _FISH_AUDIO,
     _CARTESIA,
     _FAL,
+    _REMOTION,
 )
 
 

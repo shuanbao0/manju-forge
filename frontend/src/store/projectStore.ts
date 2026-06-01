@@ -265,6 +265,10 @@ export interface Project {
     merged_video_url?: string;
     series_id?: string;
     episode_number?: number;
+    // Remotion MG engine (flow B)
+    generation_engine?: 'comic_ai' | 'remotion_mg';
+    mg_spec?: any;
+    remotion_video_url?: string;
 }
 
 interface ProjectStore {

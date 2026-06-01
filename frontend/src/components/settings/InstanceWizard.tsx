@@ -269,6 +269,21 @@ const VENDORS: VendorMeta[] = [
         credential_keys: [{ key: "FAL_API_KEY", label: "API Key (KEY_ID:KEY_SECRET)" }],
         docs_url: "https://fal.ai/docs",
     },
+    {
+        id: "remotion",
+        label: "Remotion (本地渲染 · 零成本)",
+        // Local render engine — turns stills into Ken Burns "pseudo-motion"
+        // clips instead of calling a paid i2v API. Needs the render microservice
+        // running. No credentials.
+        capabilities: ["i2v", "t2v"],
+        suggested_models: {
+            i2v: ["remotion-kenburns"],
+            t2v: ["remotion-kenburns"],
+        },
+        default_base_url: "",
+        credential_keys: [],
+        docs_url: "https://www.remotion.dev/",
+    },
 ];
 
 // Translation keys for the seven instance type labels surfaced in the wizard.

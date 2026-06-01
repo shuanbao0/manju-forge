@@ -100,6 +100,18 @@ def _dashscope_probe(instance: ModelInstance) -> TestResult:
         if instance.credentials.get("DASHSCOPE_API_KEY"):
             return TestResult(ok=True)
         return TestResult(ok=False, error="DASHSCOPE_API_KEY missing")
+    # Remotion is a local render engine, not an API: health-check the service.
+    if instance.vendor_id == "remotion":
+        from .remotion_renderer import RemotionRenderClient
+
+        started = time.time()
+        ok = RemotionRenderClient(render_url=instance.base_url or None).health()
+        latency = (time.time() - started) * 1000
+        return TestResult(
+            ok=ok,
+            latency_ms=latency,
+            error="" if ok else "Remotion render service unreachable (start remotion/server.mjs)",
+        )
     # Vendor-direct: verify each required credential is set; defer real
     # network probe to provider-specific testers added later.
     expected = _vendor_direct_required_keys(instance.vendor_id)

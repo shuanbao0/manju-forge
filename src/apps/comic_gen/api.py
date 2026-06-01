@@ -476,6 +476,60 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
 
 
 
+# ============================================================
+# Remotion MG engine (flow B) — chat-only motion-graphics videos.
+# Nested under /projects/* so the existing nginx allowlist covers it.
+# ============================================================
+
+
+class CreateMGProjectRequest(BaseModel):
+    title: str
+    text: str
+    aspect_ratio: str = "9:16"
+
+
+@app.post("/projects/mg", response_model=Script)
+async def create_mg_project(request: CreateMGProjectRequest):
+    """Create a chat-only Remotion motion-graphics project (flow B)."""
+    result = await _ctx_runtime.run_in_executor(
+        None,
+        pipeline.create_mg_project, request.title, request.text, request.aspect_ratio,
+    )
+    return signed_response(result)
+
+
+class GenerateMGSpecRequest(BaseModel):
+    style_hint: Optional[str] = None
+
+
+@app.post("/projects/{script_id}/remotion/spec", response_model=Script)
+async def generate_mg_spec(script_id: str, request: GenerateMGSpecRequest):
+    """Flow B step 1: LLM authors the VideoSpec for this project."""
+    try:
+        result = await _ctx_runtime.run_in_executor(
+            None, pipeline.generate_mg_spec, script_id, request.style_hint,
+        )
+        return signed_response(result)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/projects/{script_id}/remotion/render", response_model=Script)
+async def render_mg_video(script_id: str):
+    """Flow B step 2: render the stored VideoSpec to an MP4 via Remotion."""
+    try:
+        result = await _ctx_runtime.run_in_executor(
+            None, pipeline.render_mg_video, script_id,
+        )
+        return signed_response(result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/projects/", response_model=List[dict])
 async def list_projects():
     """Lists all projects from backend storage."""

@@ -42,6 +42,10 @@ services:
       - STORAGE_REGION=${STORAGE_REGION:-us-east-1}
       - SMTP_HOST=mailpit
       - SMTP_PORT=1025
+      # Remotion render microservice (video flows A/B). Both share the ./output
+      # volume so output-relative paths sent over the wire resolve on each side.
+      - REMOTION_RENDER_URL=http://remotion-renderer:3001
+      - REMOTION_OUTPUT_ROOT=/app/output
     volumes:
       - ./output:/app/output
       - manju_app_data:/app/data
@@ -56,6 +60,21 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    networks:
+      - manju
+
+  remotion-renderer:
+    image: shuanbaoai/manju-forge-remotion:${IMAGE_TAG:-latest}
+    build:
+      context: ./remotion
+      dockerfile: Dockerfile.remotion
+    container_name: manju-forge-remotion
+    restart: unless-stopped
+    environment:
+      - REMOTION_OUTPUT_ROOT=/app/output
+      - REMOTION_RENDER_PORT=3001
+    volumes:
+      - ./output:/app/output
     networks:
       - manju
 

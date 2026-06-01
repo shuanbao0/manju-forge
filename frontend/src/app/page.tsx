@@ -23,6 +23,7 @@ const ImportFileDialog = dynamic(() => import("@/components/series/ImportFileDia
 const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"), { ssr: false });
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
 const AdminPanel = dynamic(() => import("@/components/admin/AdminPanel"), { ssr: false });
+const RemotionMGEditor = dynamic(() => import("@/components/modules/RemotionMGEditor"), { ssr: false });
 
 // ── Create Series Dialog ──
 function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -329,7 +330,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'admin'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'mg' | 'series' | 'series-episode' | 'library' | 'settings' | 'admin'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState<string | null>(null);
@@ -464,6 +465,15 @@ export default function Home() {
         setCurrentView('project');
         return;
       }
+      // Remotion motion-graphics editor (flow B): #/mg (new) or #/mg/{id}
+      if (hash === '#/mg' || hash.startsWith('#/mg/')) {
+        const id = hash.startsWith('#/mg/') ? hash.replace('#/mg/', '') : null;
+        setProjectId(id);
+        setSeriesId(null);
+        setEpisodeId(null);
+        setCurrentView('mg');
+        return;
+      }
       if (hash === '#/library') {
         setCurrentView('library');
         setActiveTab('library');
@@ -503,6 +513,11 @@ export default function Home() {
   // 项目详情页 — 全屏，无 GlobalSidebar
   if (currentView === 'project' && projectId) {
     return <ProjectClient id={projectId} />;
+  }
+
+  // 图文/解说视频编辑器（flow B）— 全屏
+  if (currentView === 'mg') {
+    return <RemotionMGEditor id={projectId} />;
   }
 
   // 系列集数编辑 — 全屏，BreadcrumbBar 内嵌在 ProjectClient
@@ -644,6 +659,13 @@ export default function Home() {
                       >
                         <FileText size={16} className="text-gray-400" />
                         {t("home.createProject")}
+                      </button>
+                      <button
+                        onClick={() => { window.location.hash = '#/mg'; setShowCreateDropdown(false); }}
+                        className="w-full px-4 py-2.5 text-sm text-left text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+                      >
+                        <Play size={16} className="text-emerald-400" />
+                        图文/解说视频
                       </button>
                     </motion.div>
                   )}

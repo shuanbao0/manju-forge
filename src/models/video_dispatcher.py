@@ -371,6 +371,11 @@ def build_default_dispatcher(video_generator: Any) -> VideoModelDispatcher:
     # 2026 additions: Google Veo + fal.ai aggregator video.
     dispatcher.register("veo-", "vendor", make_veo_vendor_adapter)
     dispatcher.register("fal-", "vendor", make_fal_vendor_adapter)
+    # Local Remotion render engine (flow A) — "pseudo-motion" on stills, no
+    # cloud API call. Lazy import keeps the render client out of import time.
+    from .remotion_adapter import make_remotion_adapter
+
+    dispatcher.register("remotion-", "vendor", make_remotion_adapter)
     return dispatcher
 
 

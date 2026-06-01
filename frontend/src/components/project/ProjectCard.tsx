@@ -17,7 +17,12 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const { t } = useTranslation();
 
     const handleOpen = () => {
-        window.location.hash = `#/project/${project.id}`;
+        // Flow B projects use the dedicated Remotion MG editor.
+        if (project.generation_engine === "remotion_mg") {
+            window.location.hash = `#/mg/${project.id}`;
+        } else {
+            window.location.hash = `#/project/${project.id}`;
+        }
     };
 
     const handleDelete = async (e: React.MouseEvent) => {

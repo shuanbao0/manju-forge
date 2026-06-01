@@ -367,6 +367,26 @@ export const api = {
         return { ...res.data, originalText: res.data.original_text };
     },
 
+    // ── Remotion MG engine (flow B): chat-only motion-graphics videos ──────
+    createMGProject: async (title: string, text: string, aspectRatio: string = "9:16") => {
+        const res = await axios.post(`${API_URL}/projects/mg`, {
+            title, text, aspect_ratio: aspectRatio,
+        });
+        return { ...res.data, originalText: res.data.original_text };
+    },
+
+    generateMGSpec: async (scriptId: string, styleHint?: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/remotion/spec`, {
+            style_hint: styleHint ?? null,
+        });
+        return { ...res.data, originalText: res.data.original_text };
+    },
+
+    renderMGVideo: async (scriptId: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/remotion/render`);
+        return { ...res.data, originalText: res.data.original_text };
+    },
+
     syncDescriptions: async (scriptId: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/sync_descriptions`);
         return res.data;

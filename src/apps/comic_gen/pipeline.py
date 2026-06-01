@@ -9,7 +9,7 @@ import subprocess
 import threading
 import platform
 from urllib.parse import quote
-from .models import Script, GenerationStatus, VideoTask, Character, Scene, StoryboardFrame, Series, PromptConfig, ImageAsset, ImageVariant
+from .models import Script, GenerationStatus, VideoTask, Character, Scene, StoryboardFrame, Series, PromptConfig, ImageAsset, ImageVariant, ModelSettings
 from .llm import ScriptProcessor
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -76,6 +76,7 @@ class ComicGenPipeline:
         self.video_generator = VideoGenerator(_sub_config('video'))
         self.audio_generator = AudioGenerator(_sub_config('audio'))
         self.export_manager = ExportManager(_sub_config('export'))
+        self._mg_generator = None  # flow B (Remotion MG), built lazily
 
         self.data_file = os.path.join(self.data_root, "projects.json")
         self.series_data_file = os.path.join(self.data_root, "series.json")
@@ -114,7 +115,29 @@ class ComicGenPipeline:
             )
             return "dashscope"
 
-    # ... (existing methods)
+    def _build_video_extras(self, script: "Script", task: "VideoTask") -> Dict[str, Any]:
+        """Collect frame-level hints for locally-composing video adapters.
+
+        Only the Remotion engine reads these today (camera_movement → Ken Burns,
+        dialogue → burned-in subtitle, dialogue audio → clip audio). Returns an
+        empty dict for asset videos or when the frame can't be found, so cloud
+        adapters keep getting a no-op ``extras``.
+        """
+        extras: Dict[str, Any] = {}
+        if not getattr(task, "frame_id", None) or not script:
+            return extras
+        frame = next((f for f in script.frames if f.id == task.frame_id), None)
+        if frame is None:
+            return extras
+        extras["camera_movement"] = frame.camera_movement
+        extras["shot_size"] = frame.shot_size
+        extras["dialogue"] = frame.dialogue
+        extras["duration_seconds"] = frame.duration_seconds
+        extras["dialogue_audio"] = frame.audio_url
+        ms = getattr(script, "model_settings", None)
+        if ms is not None:
+            extras["aspect_ratio"] = getattr(ms, "storyboard_aspect_ratio", None)
+        return extras
 
     def export_project(self, script_id: str, options: Dict[str, Any]) -> str:
         """Step 7: Export project to final video."""
@@ -190,6 +213,74 @@ class ComicGenPipeline:
         self._save_data()
         return new_script
 
+    # ── Flow B: Remotion motion-graphics engine (chat-only) ───────────────
+
+    @property
+    def mg_generator(self):
+        """Lazily-built generator for the Remotion MG engine (flow B)."""
+        if self._mg_generator is None:
+            from .remotion_mg import RemotionMGGenerator
+            self._mg_generator = RemotionMGGenerator()
+        return self._mg_generator
+
+    def create_mg_project(self, title: str, text: str, aspect_ratio: str = "9:16") -> Script:
+        """Create a chat-only motion-graphics project (flow B).
+
+        No novel parse / no entities — the project's whole video is authored as
+        a VideoSpec by the LLM later (``generate_mg_spec``) and rendered by
+        Remotion (``render_mg_video``). The漫剧 stages are never invoked.
+        """
+        now = time.time()
+        script = Script(
+            id=str(uuid.uuid4()),
+            title=title,
+            original_text=text,
+            generation_engine="remotion_mg",
+            model_settings=ModelSettings(storyboard_aspect_ratio=aspect_ratio),
+            created_at=now,
+            updated_at=now,
+        )
+        self.scripts[script.id] = script
+        self._save_data()
+        return script
+
+    def generate_mg_spec(self, script_id: str, style_hint: Optional[str] = None) -> Script:
+        """Flow B step 1: LLM authors the VideoSpec and stores it on the script."""
+        script = self.get_script(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        aspect = getattr(script.model_settings, "storyboard_aspect_ratio", "9:16") or "9:16"
+        with scoped_instance(script.model_settings.llm_instance_id, InstanceType.LLM):
+            spec = self.mg_generator.generate_spec(
+                script.original_text, aspect_ratio=aspect, style_hint=style_hint
+            )
+        script.mg_spec = spec.to_payload()
+        script.updated_at = time.time()
+        self._save_data()
+        return script
+
+    def render_mg_video(self, script_id: str) -> Script:
+        """Flow B step 2: render the stored VideoSpec to an MP4 via Remotion."""
+        from ...models.remotion_spec import VideoSpec
+
+        script = self.get_script(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        if not script.mg_spec:
+            raise ValueError("No mg_spec on this project — run generate_mg_spec first")
+
+        spec = VideoSpec.model_validate(script.mg_spec)
+        output_filename = f"remotion_{script_id}_{int(time.time())}.mp4"
+        output_path = _safe_resolve_path(
+            os.path.join(self.data_root, "video"), output_filename
+        )
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        self.mg_generator.render(spec, output_path)
+        # Mirror merged_video_url's "videos/<file>" alias convention.
+        script.remotion_video_url = f"videos/{output_filename}"
+        script.updated_at = time.time()
+        self._save_data()
+        return script
 
     def generate_assets(self, script_id: str) -> Script:
         """Step 2: Generate character and scene assets (Batch)."""
@@ -3126,6 +3217,11 @@ class ComicGenPipeline:
                 model_name = task.model
                 backend = self._resolve_video_backend(model_name)
                 adapter = self._video_dispatcher.resolve(model_name, backend)
+                # Frame-derived motion hints for adapters that compose locally
+                # (the Remotion engine maps these to Ken Burns + subtitle). The
+                # generic ``extras`` channel exists for exactly this — cloud
+                # adapters ignore it, so existing i2v/r2v routes are unaffected.
+                extras = self._build_video_extras(script, task)
                 # Adapters resolve their own bytes/URL via MediaResolver from
                 # the stable img_url ref — no per-call temp materialization
                 # here. (`video.py::generate_clip` still passes img_path for
@@ -3137,6 +3233,7 @@ class ComicGenPipeline:
                         img_url=img_url,
                         audio_url=final_audio_url,
                         generate_audio=final_generate_audio,
+                        extras=extras,
                     )
                 )
             

@@ -367,6 +367,18 @@ class Script(BaseModel):
     # the user has not run the rewriter yet — fall back to original_text.
     formatted_text: Optional[str] = Field(None, description="Screenplay-format rewrite of original_text")
 
+    # Which video pipeline produces this project's output.
+    #   "comic_ai"   — the default漫剧 flow (T2I/i2v/r2v + merge).
+    #   "remotion_mg" — flow B: a chat-only motion-graphics / explainer video
+    #                   rendered entirely by Remotion from ``mg_spec``; the
+    #                   assets/storyboard/i2v stages are bypassed.
+    generation_engine: str = Field("comic_ai", description="Video engine: comic_ai | remotion_mg")
+    # Flow B: LLM-authored VideoSpec (matches src/models/remotion_spec.py).
+    mg_spec: Optional[Dict[str, Any]] = Field(None, description="Remotion VideoSpec for the MG engine")
+    # Flow B: rendered output (kept separate from merged_video_url so a project
+    # could in principle carry both).
+    remotion_video_url: Optional[str] = Field(None, description="URL of the Remotion-rendered video (flow B)")
+
     created_at: float
     updated_at: float
 

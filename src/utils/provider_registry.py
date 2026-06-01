@@ -374,6 +374,18 @@ DEFAULT_PROVIDER_FAMILIES: Tuple[ProviderFamilyConfig, ...] = (
         },
         supported_modalities=("tts",),
     ),
+    # ── Remotion local render engine (flow A) ────────────────────────────
+    # Not a cloud vendor: "remotion-*" models are rendered locally by the
+    # Remotion microservice. No credentials, no env toggle — it always routes
+    # to the in-process RemotionVideoAdapter. backend_default must be one of
+    # the supported backends, so we reuse "vendor" (the dispatcher route is
+    # keyed ("remotion-", "vendor")).
+    ProviderFamilyConfig(
+        model_family="remotion-",
+        backend_default="vendor",
+        credential_sources={},
+        supported_modalities=("i2v", "t2v"),
+    ),
     # ── fal.ai aggregator ────────────────────────────────────────────────
     ProviderFamilyConfig(
         model_family="fal-",
